@@ -100,11 +100,19 @@ yarn build:watch                    # Watch mode for rebuilds during dev
 
 ## Code Style & Conventions
 
+### File Headers
+All source files must include the copyright and license header:
+```typescript
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: Apache-2.0
+```
+
 ### Language & TypeScript
 - **TypeScript** throughout (strict mode enabled)
 - Target: ES2020, module: ES2020
 - Module resolution: Node
-- All packages emit both CJS (`dist/`) and ESM (`lib-esm/`) outputs
+- All packages emit both CJS (`dist/cjs/`) and ESM (`dist/esm/`) outputs via Rollup
+- Rollup uses `preserveModules: true` to maintain file structure in output
 
 ### Formatting (Prettier)
 - **Tabs** for indentation (not spaces)
@@ -128,10 +136,17 @@ Key rules:
 - Method signature style: `method` (not `property`)
 
 ### Naming Conventions
-- **camelCase** for variables, functions, methods
-- **PascalCase** for classes, interfaces, types, enums
+- **camelCase** for variables, functions, methods, and utility filenames
+- **PascalCase** for classes, interfaces, types, enums, and class filenames (e.g., `Hub.ts`, `StorageCache.ts`)
 - Prefix unused parameters/variables with `_`
 - Internal/private APIs are typically in `src/` subdirectories not exported from package index
+
+### Platform-Specific Files
+React Native and platform-specific code uses file extension conventions:
+- `.native.ts` — React Native implementation
+- `.android.ts` / `.ios.ts` — Platform-specific native code
+- `.ts` — Default (web/browser) implementation
+- All variants export the same interface; the bundler selects the correct file
 
 ### Import Conventions
 - Imports must be ordered with blank lines between groups (enforced by `import/order`)
@@ -186,11 +201,19 @@ The foundation that all other packages depend on. Provides:
 - **Internal utilities** — retry, caching, signing, URL parsing
 
 ### Category Pattern
-Each category package (auth, storage, etc.) follows a similar pattern:
-1. Exports public API functions from `src/index.ts`
-2. Has provider-specific implementations (e.g., `src/providers/cognito/`)
-3. Uses `@aws-amplify/core` for configuration, credentials, and Hub events
-4. Defines its own types in `src/types/`
+Each category package (auth, storage, etc.) follows a layered architecture:
+1. **Public API** — exported from `src/index.ts` as standalone functions (functional style, not class-based)
+2. **Providers** — service-specific implementations in `src/providers/` (e.g., `src/providers/cognito/`)
+3. **Foundation** — shared utilities, service client factories, and serialization in `src/foundation/`
+4. **Types** — package-specific types in `src/types/`
+5. **Internals** — private APIs in `src/client/` or `src/internal/`, not re-exported from index
+
+All categories use `@aws-amplify/core` for configuration (`Amplify.configure()` singleton), credentials, and Hub events.
+
+### Error Handling
+- Base class: `AmplifyError` from `@aws-amplify/core` (includes `recoverySuggestion` field)
+- Each service operation has specific error classes (e.g., `SignInException`, `StorageError`)
+- Errors are typed and documented with `@throws` JSDoc annotations
 
 ### Bundle Size
 Bundle size is tracked and tested per-package via `size-limit`. To check:
