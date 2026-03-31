@@ -23,14 +23,14 @@ The HTTP link is the foundation — it sends GraphQL operations to your AppSync 
 
 ```typescript
 import { createHttpLink } from '@apollo/client';
-import outputs from '../amplify_outputs.json';
+import config from './amplifyconfiguration.json';
 
 const httpLink = createHttpLink({
-  uri: outputs.data.url,
+  uri: config.aws_appsync_graphqlEndpoint,
 });
 ```
 
-`outputs.data.url` is the GraphQL endpoint from your `amplify_outputs.json` file (see [Prerequisites](./03-prerequisites.md#finding-your-graphql-endpoint) for the full shape).
+`config.aws_appsync_graphqlEndpoint` is the GraphQL endpoint from your Amplify configuration file (see [Prerequisites](./03-prerequisites.md#finding-your-graphql-endpoint) for the full shape). If your config file is named `aws-exports.js`, adjust the import path accordingly.
 
 > **Do NOT use `BatchHttpLink`.** AppSync does not support HTTP request batching. Batched requests will fail silently, returning errors for all operations in the batch.
 
@@ -217,7 +217,7 @@ async function handleSignOut() {
 
 ## Complete Setup File
 
-Here is the full `src/apolloClient.ts` file combining everything above. Copy this into your project and adjust the import path for `amplify_outputs.json`:
+Here is the full `src/apolloClient.ts` file combining everything above. Copy this into your project and adjust the import path for your Amplify configuration file:
 
 ```typescript
 // src/apolloClient.ts
@@ -231,12 +231,12 @@ import { setContext } from '@apollo/client/link/context';
 import { onError } from '@apollo/client/link/error';
 import { RetryLink } from '@apollo/client/link/retry';
 import { fetchAuthSession } from 'aws-amplify/auth';
-import outputs from '../amplify_outputs.json';
+import config from './amplifyconfiguration.json';
 
 // --- HTTP Link ---
 // Connects to your AppSync GraphQL endpoint
 const httpLink = createHttpLink({
-  uri: outputs.data.url,
+  uri: config.aws_appsync_graphqlEndpoint,
 });
 
 // --- Auth Link ---

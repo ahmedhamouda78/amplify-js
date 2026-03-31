@@ -18,7 +18,7 @@ This test plan provides step-by-step instructions for migrating the Gen 1 DataSt
 ### Dependencies to Install
 
 ```bash
-npm install @apollo/client graphql apollo3-cache-persist localforage
+npm install @apollo/client@^3.14.0 apollo3-cache-persist localforage
 ```
 
 Packages:

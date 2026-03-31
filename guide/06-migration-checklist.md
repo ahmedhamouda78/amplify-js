@@ -13,8 +13,8 @@ Each checklist item links to the relevant section of this guide where you can fi
 Complete these steps before writing any migration code. They ensure your environment is ready and you have a clear plan for the migration.
 
 - [ ] **Choose your strategy** -- Complete the [Decision Framework](./01-decision-framework.md) and confirm your approach (API Only, Local Caching, or Offline-First)
-- [ ] **Verify your backend is deployed** -- Confirm your Amplify Gen 2 backend is deployed and `amplify_outputs.json` is generated (`npx ampx generate outputs`)
-- [ ] **Confirm Amplify is configured** -- Verify that `Amplify.configure(outputs)` runs at app startup before any API calls
+- [ ] **Verify your backend is deployed** -- Confirm your Amplify Gen 1 backend is deployed and your configuration file (`amplifyconfiguration.json` or `aws-exports.js`) is in your project
+- [ ] **Confirm Amplify is configured** -- Verify that `Amplify.configure(config)` runs at app startup before any API calls
 - [ ] **Check conflict resolution status** -- Determine if conflict resolution is enabled on your backend (it is if you used DataStore). See [Understanding _version Metadata](./03-prerequisites.md#understanding-_version-metadata)
 - [ ] **Inventory all DataStore usage** -- Search your codebase for every DataStore import and operation:
   - `import { DataStore } from 'aws-amplify/datastore'`
@@ -23,7 +23,7 @@ Complete these steps before writing any migration code. They ensure your environ
   - `DataStore.start()`, `DataStore.stop()`, `DataStore.clear()`
 - [ ] **Identify all models and relationships** -- List every DataStore model and its relationships (`hasMany`, `belongsTo`, `hasOne`, `manyToMany`). Note which models have custom primary keys or composite keys.
 - [ ] **Write GraphQL operations for each model** -- Generate or manually write the GraphQL queries, mutations, and subscriptions for each model. Use the fragment pattern from [Prerequisites](./03-prerequisites.md#graphql-fragment-for-reusable-field-selection). Include `_version`, `_deleted`, and `_lastChangedAt` in all fragments.
-- [ ] **Install Apollo Client** -- Run `npm install @apollo/client@^3.14.0 graphql`
+- [ ] **Install Apollo Client** -- Run `npm install @apollo/client@^3.14.0` (do not install `graphql` separately — it is already provided by `aws-amplify`)
 - [ ] **Set up Apollo Client** -- Follow [Apollo Client Setup](./04-apollo-setup.md) and verify the connection works by running a simple list query against your AppSync endpoint
 - [ ] **Set up Amplify subscription client** -- Create the `amplifyClient` using `generateClient()` as described in [Subscriptions](./05-subscriptions.md#setting-up-the-amplify-subscription-client)
 
@@ -51,7 +51,7 @@ Follow these steps while migrating each feature. Work through one model at a tim
 **For predicates and filters:**
 
 - [ ] **Migrate filter syntax** -- Convert DataStore predicates (`c => c.status.eq('ACTIVE')`) to GraphQL filter objects (`{ filter: { status: { eq: 'ACTIVE' } } }`)
-- [ ] **Migrate sorting** -- Convert DataStore sort predicates to GraphQL `sortDirection` and `sortField` parameters
+- [ ] **Migrate sorting** -- Implement client-side sorting to replace DataStore sort predicates (AppSync's basic list queries have no `sortDirection` argument by default; see [Predicates and Filters — Sorting](./08-predicates-filters.md#sorting-migration) for patterns)
 - [ ] **Migrate pagination** -- Convert DataStore `.page()` calls to GraphQL `nextToken` and `limit` parameters
 
 <!-- ai:checklist:post-migration -->

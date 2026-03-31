@@ -18,8 +18,7 @@ This test plan provides step-by-step instructions for migrating the Gen 1 DataSt
 ### Dependencies to Install
 
 ```bash
-npm install @apollo/client graphql
-npm install @apollo/client
+npm install @apollo/client@^3.14.0
 ```
 
 Packages:

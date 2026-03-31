@@ -120,7 +120,7 @@ import { RetryLink } from '@apollo/client/link/retry';
 import { CachePersistor, LocalForageWrapper } from 'apollo3-cache-persist';
 import localforage from 'localforage';
 import { fetchAuthSession } from 'aws-amplify/auth';
-import outputs from '../amplify_outputs.json';
+import config from './amplifyconfiguration.json';
 
 // --- Configure IndexedDB via localforage ---
 localforage.config({
@@ -149,7 +149,7 @@ export const persistor = new CachePersistor({
 
 // --- HTTP Link ---
 const httpLink = createHttpLink({
-  uri: outputs.data.url,
+  uri: config.aws_appsync_graphqlEndpoint,
 });
 
 // --- Auth Link ---

@@ -2,7 +2,7 @@
 
 # Real-Time Subscriptions
 
-This page explains how to set up real-time data updates in your migrated app. The key architectural decision is that **subscriptions use Amplify Gen 2** (not Apollo), while queries and mutations continue to use Apollo Client. This hybrid approach exists because AppSync uses a custom WebSocket protocol that standard GraphQL subscription libraries cannot handle.
+This page explains how to set up real-time data updates in your migrated app. The key architectural decision is that **subscriptions use the Amplify library** (not Apollo), while queries and mutations continue to use Apollo Client. This hybrid approach exists because AppSync uses a custom WebSocket protocol that standard GraphQL subscription libraries cannot handle.
 
 ## Why Not Apollo Subscriptions?
 
@@ -16,26 +16,28 @@ If you try to use standard Apollo subscription libraries with AppSync:
 - The connection then **immediately disconnects** with no helpful error message
 - Subscription callbacks never fire, and debugging is extremely difficult because the failure is silent
 
-Amplify Gen 2 already has a production-tested implementation (`AWSAppSyncRealTimeProvider`) that handles the AppSync WebSocket protocol, including authentication, automatic reconnection, and token refresh. Rather than replicating this complex protocol handling, the guide uses Amplify for subscriptions and Apollo for everything else.
+The `aws-amplify` v6 library already has a production-tested implementation (`AWSAppSyncRealTimeProvider`) that handles the AppSync WebSocket protocol, including authentication, automatic reconnection, and token refresh. This works with both Gen 1 and Gen 2 backends. Rather than replicating this complex protocol handling, the guide uses Amplify for subscriptions and Apollo for everything else.
 
 > **Warning:** Do NOT use `graphql-ws`, `subscriptions-transport-ws`, or Apollo's `WebSocketLink` with AppSync.
 > These libraries do not speak AppSync's custom WebSocket protocol and will fail silently.
 
 ## Setting Up the Amplify Subscription Client
 
-Create the Amplify client alongside your Apollo Client. You should already have Amplify configured from your Gen 2 setup (`Amplify.configure(outputs)` at app startup):
+Create the Amplify client alongside your Apollo Client. You should already have Amplify configured at app startup (`Amplify.configure(config)` where `config` is your `amplifyconfiguration.json` or `aws-exports.js`):
 
 ```typescript
 import { generateClient } from 'aws-amplify/api';
 
 // Use alongside your Apollo Client (from apollo-setup)
-// Amplify.configure(outputs) must have been called before this
+// Amplify.configure(config) must have been called before this
 const amplifyClient = generateClient();
 ```
 
 You now have two clients:
 - **`apolloClient`** — for queries, mutations, and caching (configured in [Apollo Client Setup](./04-apollo-setup.md))
 - **`amplifyClient`** — for subscriptions only
+
+> **Console warning:** If `generateClient()` is in a different file from `Amplify.configure()`, you may see the warning *"Amplify has not been configured"* in the console. This is because ES module imports execute before module body code, so `generateClient()` runs before `Amplify.configure()`. The warning is harmless — `generateClient()` creates a client proxy, and the actual configuration is resolved when you call `amplifyClient.graphql()` (which happens inside `useEffect`, well after Amplify is configured). This is the [standard Amplify pattern](https://docs.amplify.aws/react/build-a-backend/troubleshooting/library-not-configured/) for module-level client creation.
 
 ## Subscription GraphQL Definitions
 
@@ -71,9 +73,9 @@ The refetch pattern is the simplest and most reliable approach. When a subscript
 
 ```typescript
 import { useQuery } from '@apollo/client';
-import { generateClient } from 'aws-amplify/api';
 import { useEffect } from 'react';
 import { LIST_POSTS } from './graphql/queries';
+import { generateClient } from 'aws-amplify/api';
 
 const amplifyClient = generateClient();
 
@@ -81,30 +83,33 @@ function PostList() {
   const { data, loading, error, refetch } = useQuery(LIST_POSTS);
 
   useEffect(() => {
+    // Note: TypeScript cannot infer that graphql() returns an Observable for
+    // subscription queries (it types the return as Promise | Observable).
+    // Cast to `any` to access .subscribe(), or use Amplify codegen for typed subscriptions.
     const subscriptions = [
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnCreatePost {
           onCreatePost { id }
         }`
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
-        error: (err) => console.error('Create subscription error:', err),
+        error: (err: any) => console.error('Create subscription error:', err),
       }),
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnUpdatePost {
           onUpdatePost { id }
         }`
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
-        error: (err) => console.error('Update subscription error:', err),
+        error: (err: any) => console.error('Update subscription error:', err),
       }),
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnDeletePost {
           onDeletePost { id }
         }`
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
-        error: (err) => console.error('Delete subscription error:', err),
+        error: (err: any) => console.error('Delete subscription error:', err),
       }),
     ];
 
@@ -143,10 +148,10 @@ For applications that need lower latency or handle high-frequency updates, you c
 
 ```typescript
 import { useQuery } from '@apollo/client';
-import { generateClient } from 'aws-amplify/api';
 import { useEffect } from 'react';
 import { LIST_POSTS, POST_DETAILS_FRAGMENT } from './graphql/queries';
 import { apolloClient } from './apolloClient';
+import { generateClient } from 'aws-amplify/api';
 
 const amplifyClient = generateClient();
 
@@ -154,16 +159,16 @@ function PostListAdvanced() {
   const { data, loading, error } = useQuery(LIST_POSTS);
 
   useEffect(() => {
-    const sub = amplifyClient.graphql({
+    const sub = (amplifyClient.graphql({
       query: `subscription OnCreatePost {
         onCreatePost {
           id title content status rating
           _version _deleted _lastChangedAt
-          createdAt updatedAt
+          createdAt updatedAt owner
         }
       }`
-    }).subscribe({
-      next: ({ data }) => {
+    }) as any).subscribe({
+      next: ({ data }: any) => {
         const newPost = data.onCreatePost;
         apolloClient.cache.modify({
           fields: {
@@ -180,7 +185,7 @@ function PostListAdvanced() {
           },
         });
       },
-      error: (err) => console.error('Create subscription error:', err),
+      error: (err: any) => console.error('Create subscription error:', err),
     });
 
     return () => sub.unsubscribe();
@@ -223,11 +228,11 @@ The array pattern shown in Pattern 1 is the recommended approach for managing mu
 
 ```typescript
 useEffect(() => {
-  // Create an array of all subscriptions
+  // Create an array of all subscriptions (cast to any for TypeScript)
   const subscriptions = [
-    amplifyClient.graphql({ query: '...' }).subscribe({ next: () => refetch() }),
-    amplifyClient.graphql({ query: '...' }).subscribe({ next: () => refetch() }),
-    amplifyClient.graphql({ query: '...' }).subscribe({ next: () => refetch() }),
+    (amplifyClient.graphql({ query: '...' }) as any).subscribe({ next: () => refetch() }),
+    (amplifyClient.graphql({ query: '...' }) as any).subscribe({ next: () => refetch() }),
+    (amplifyClient.graphql({ query: '...' }) as any).subscribe({ next: () => refetch() }),
   ];
 
   // Clean up all subscriptions on unmount
@@ -239,7 +244,7 @@ If you only have a single subscription, the cleanup is simpler:
 
 ```typescript
 useEffect(() => {
-  const sub = amplifyClient.graphql({ query: '...' }).subscribe({
+  const sub = (amplifyClient.graphql({ query: '...' }) as any).subscribe({
     next: () => refetch(),
   });
 
@@ -259,7 +264,7 @@ Check your AppSync schema in the AWS console to confirm the exact subscription f
 
 ### Auth error on subscription
 
-Amplify must be configured **before** creating the subscription client. Make sure `Amplify.configure(outputs)` runs at app startup (typically in your root component or entry file) before any call to `generateClient()`. If you create the client before configuring Amplify, the subscription will fail with an authentication error.
+Amplify must be configured **before** the subscription client is used. Make sure `Amplify.configure(config)` runs at app startup (typically in your entry file) before any component calls `amplifyClient.graphql()`. A module-level `const amplifyClient = generateClient()` may log a *"not configured"* warning at import time, but this is harmless — the client resolves its configuration when `graphql()` is actually called, which happens inside `useEffect` after Amplify is configured. If subscriptions fail with auth errors, verify that `Amplify.configure()` runs before your app renders.
 
 ### Subscription disconnects after ~5 minutes of inactivity
 
@@ -267,7 +272,11 @@ This is normal behavior. AppSync WebSocket connections have a keep-alive mechani
 
 ### Subscription works in development but not in production
 
-Check that your `amplify_outputs.json` configuration is correct for the production environment. The GraphQL endpoint URL and auth configuration must match your deployed backend. Also verify that CORS is configured on your AppSync API to allow WebSocket connections from your production domain.
+Check that your Amplify configuration file (`amplifyconfiguration.json` or `aws-exports.js`) is correct for the production environment. The GraphQL endpoint URL and auth configuration must match your deployed backend. Also verify that CORS is configured on your AppSync API to allow WebSocket connections from your production domain.
+
+### Subscription connects but receives no events (owner-based auth)
+
+If your model uses **owner-based authorization** (`@auth(rules: [{ allow: owner }])`), you must pass the `$owner` variable in your subscriptions. Without it, the subscription connects successfully but AppSync silently filters out all events. This is the most common cause of "subscriptions work but nothing happens." See [React Integration — Owner-Based Auth Subscriptions](./10-react-integration.md#owner-based-auth-subscriptions) for the complete pattern.
 
 ---
 

@@ -8,7 +8,7 @@ This page covers migrating all four relationship types: `hasMany`, `belongsTo`, 
 
 ## Schema Reference
 
-All examples on this page use the following Amplify Gen 2 schema definitions:
+All examples on this page use the following illustrative schema definitions:
 
 ```typescript
 // amplify/data/resource.ts (relevant models)
@@ -49,6 +49,8 @@ const schema = a.schema({
 These models extend the `Post` model from the [Prerequisites](./03-prerequisites.md) page with `Comment`, `Tag`, `PostTag` (join model), and `PostMetadata`.
 
 > **Note:** All relationship examples include `_version`, `_deleted`, and `_lastChangedAt` fields in selections for conflict-resolution-enabled backends. See [Prerequisites: Understanding _version Metadata](./03-prerequisites.md#understanding-_version-metadata) for details.
+
+> **Important: Check your actual field names.** Gen 1 backends use uppercase `ID` suffixes for foreign keys (e.g., `postID`, `tagID`), while the Gen 2 schema syntax shown above uses lowercase `Id` (e.g., `postId`, `tagId`). The GraphQL operations you write must match your actual schema field names exactly. Check your `src/graphql/queries.js` or the AppSync console to confirm. Similarly, your model field names may differ from the examples (e.g., your Tag model might use `label` instead of `name`).
 
 ---
 

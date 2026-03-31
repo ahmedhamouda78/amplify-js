@@ -615,8 +615,70 @@ if (data.listPosts.nextToken === null) {
 
 If your DataStore app uses a page-number navigation pattern (e.g., "Page 1 | 2 | 3 | 4 | 5"), you have two options:
 
-1. **Redesign as infinite scroll / Load More** (recommended). Cursor-based pagination is designed for this pattern.
-2. **Fetch pages sequentially and cache tokens**. Store each `nextToken` as you encounter it, mapping them to page numbers. This is complex and fragile -- not recommended for most apps.
+1. **Redesign as infinite scroll / Load More** (recommended). Cursor-based pagination is designed for this pattern. See the [Load More Pattern](#load-more-pattern-react) above.
+
+2. **Fetch all records and paginate client-side**. Load the full dataset (omit `limit`/`nextToken`), then slice the array by page number in your component. Simple and preserves page-number UX, but loads all data upfront — suitable for datasets under a few hundred records.
+
+3. **Fetch pages sequentially and cache tokens**. Store each `nextToken` as you encounter it, mapping them to page numbers. This is complex and fragile -- not recommended for most apps.
+
+### Client-Side Pagination (React)
+
+If your DataStore app uses page-number navigation and you want to preserve that UX, fetch all records and paginate in the component. This approach is simple but loads all data upfront — use it only for datasets under a few hundred records.
+
+```typescript
+import { useState, useMemo } from 'react';
+import { useQuery } from '@apollo/client';
+
+const PAGE_SIZE = 10;
+
+function PaginatedPostList() {
+  const [currentPage, setCurrentPage] = useState(1);
+  const { data, loading, error } = useQuery(LIST_POSTS);
+
+  const posts = useMemo(() => {
+    if (!data?.listPosts?.items) return [];
+    return data.listPosts.items.filter((p: any) => !p._deleted);
+  }, [data]);
+
+  const totalPages = Math.ceil(posts.length / PAGE_SIZE);
+  const pageItems = posts.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
+  if (loading && !data) return <p>Loading...</p>;
+  if (error) return <p>Error: {error.message}</p>;
+
+  return (
+    <div>
+      <ul>
+        {pageItems.map((post: any) => (
+          <li key={post.id}>{post.title}</li>
+        ))}
+      </ul>
+      <div>
+        <button
+          onClick={() => setCurrentPage((p) => p - 1)}
+          disabled={currentPage <= 1}
+        >
+          Prev
+        </button>
+        <span>
+          Page {currentPage} of {totalPages}
+        </span>
+        <button
+          onClick={() => setCurrentPage((p) => p + 1)}
+          disabled={currentPage >= totalPages}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+> **Warning:** This fetches the entire dataset on mount. For large datasets (hundreds+ of records), use the Load More pattern instead or implement server-side pagination with `@index` directives.
 
 ---
 

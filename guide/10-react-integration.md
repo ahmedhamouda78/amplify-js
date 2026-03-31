@@ -12,6 +12,8 @@ After completing this page, you will be able to convert any React component that
 - The Amplify subscription client must be configured (see [Subscriptions](./05-subscriptions.md))
 - GraphQL operations (`LIST_POSTS`, `CREATE_POST`, `UPDATE_POST`, `DELETE_POST`, `GET_POST`) are defined in the [Prerequisites](./03-prerequisites.md#complete-operation-definitions) page
 
+> **TypeScript note:** Throughout this page, subscription calls use `(amplifyClient.graphql({ ... }) as any).subscribe()`. The `as any` cast is needed because TypeScript cannot infer at compile time that `graphql()` returns an Observable (not a Promise) for subscription queries. See [Subscriptions](./05-subscriptions.md) for details. All subscription code examples in this section require this cast.
+
 ---
 
 <!-- ai:apollo-provider -->
@@ -30,6 +32,44 @@ function App() {
 ```
 
 Any component rendered inside `ApolloProvider` can use `useQuery`, `useMutation`, and other Apollo hooks without additional configuration.
+
+### Important: Apollo Hooks and the Authenticator Boundary
+
+> **Warning:** Apollo hooks like `useQuery` fire immediately when a component mounts. If you place `useQuery` in the same component that renders `<Authenticator>`, the query will execute **before the user signs in**, producing 401 errors and retry storms.
+
+```typescript
+// WRONG — useQuery fires before the user authenticates
+function App() {
+  const { data } = useQuery(LIST_POSTS); // Fires immediately on mount!
+  return (
+    <Authenticator>
+      {({ signOut, user }) => <div>{/* uses data */}</div>}
+    </Authenticator>
+  );
+}
+```
+
+The fix is to extract an inner component that is only rendered after successful authentication:
+
+```typescript
+// CORRECT — queries only fire after the user is authenticated
+function AppContent({ signOut, user }: { signOut?: () => void; user: any }) {
+  const { data } = useQuery(LIST_POSTS); // Fires after auth, has valid token
+  return <div>{/* uses data */}</div>;
+}
+
+function App() {
+  return (
+    <Authenticator>
+      {({ signOut, user }) => <AppContent signOut={signOut} user={user} />}
+    </Authenticator>
+  );
+}
+```
+
+This pattern ensures that all `useQuery` and `useMutation` hooks only mount after the user has authenticated, so the auth link in your Apollo Client has a valid Cognito token to inject.
+
+> **Naming the `signOut` prop:** The Authenticator's render prop provides a `signOut` function. If your `AppContent` component also imports Amplify's `signOut` from `aws-amplify/auth`, these names will collide. Rename the prop (e.g., `signOutFn`) or the import to avoid shadowing. See [Apollo Client Setup — Sign-Out](./04-apollo-setup.md) for the full `handleSignOut` pattern that clears Apollo's cache before signing out.
 
 ---
 
@@ -299,27 +339,27 @@ function PostList() {
 
   useEffect(() => {
     const subscriptions = [
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnCreatePost {
           onCreatePost { id }
         }`,
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
         error: (err: any) => console.error('Create subscription error:', err),
       }),
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnUpdatePost {
           onUpdatePost { id }
         }`,
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
         error: (err: any) => console.error('Update subscription error:', err),
       }),
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnDeletePost {
           onDeletePost { id }
         }`,
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
         error: (err: any) => console.error('Delete subscription error:', err),
       }),
@@ -355,11 +395,11 @@ DataStore's `observe()` supported observing a single record by ID. To achieve th
 
 ```typescript
 useEffect(() => {
-  const sub = amplifyClient.graphql({
+  const sub = (amplifyClient.graphql({
     query: `subscription OnUpdatePost {
       onUpdatePost { id }
     }`,
-  }).subscribe({
+  }) as any).subscribe({
     next: ({ data }: any) => {
       if (data.onUpdatePost.id === targetId) {
         refetch();
@@ -432,27 +472,27 @@ function PublishedPosts() {
 
   useEffect(() => {
     const subscriptions = [
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnCreatePost {
           onCreatePost { id }
         }`,
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
         error: (err: any) => console.error('Create subscription error:', err),
       }),
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnUpdatePost {
           onUpdatePost { id }
         }`,
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
         error: (err: any) => console.error('Update subscription error:', err),
       }),
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnDeletePost {
           onDeletePost { id }
         }`,
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
         error: (err: any) => console.error('Delete subscription error:', err),
       }),
@@ -550,30 +590,30 @@ function MyPosts() {
     if (!owner) return;
 
     const subscriptions = [
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnCreatePost($owner: String!) {
           onCreatePost(owner: $owner) { id }
         }`,
         variables: { owner },
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
         error: (err: any) => console.error('Create subscription error:', err),
       }),
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnUpdatePost($owner: String!) {
           onUpdatePost(owner: $owner) { id }
         }`,
         variables: { owner },
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
         error: (err: any) => console.error('Update subscription error:', err),
       }),
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnDeletePost($owner: String!) {
           onDeletePost(owner: $owner) { id }
         }`,
         variables: { owner },
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
         error: (err: any) => console.error('Delete subscription error:', err),
       }),
@@ -756,27 +796,27 @@ function PostDashboard() {
   // Real-time subscriptions (replaces observeQuery)
   useEffect(() => {
     const subscriptions = [
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnCreatePost {
           onCreatePost { id }
         }`,
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
         error: (err: any) => console.error('Create subscription error:', err),
       }),
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnUpdatePost {
           onUpdatePost { id }
         }`,
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
         error: (err: any) => console.error('Update subscription error:', err),
       }),
-      amplifyClient.graphql({
+      (amplifyClient.graphql({
         query: `subscription OnDeletePost {
           onDeletePost { id }
         }`,
-      }).subscribe({
+      }) as any).subscribe({
         next: () => refetch(),
         error: (err: any) => console.error('Delete subscription error:', err),
       }),
@@ -866,6 +906,7 @@ Use this checklist when converting each React component from DataStore to Apollo
 
 - [ ] Wrap app root with `<ApolloProvider>` (see [Apollo Client Setup](./04-apollo-setup.md#connecting-to-react))
 - [ ] Configure Amplify subscription client with `generateClient()` (see [Subscriptions](./05-subscriptions.md))
+- [ ] Ensure all `useQuery`/`useMutation` hooks are inside the `<Authenticator>` boundary (see [Apollo Hooks and the Authenticator Boundary](#important-apollo-hooks-and-the-authenticator-boundary))
 
 ### Queries
 

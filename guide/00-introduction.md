@@ -2,8 +2,8 @@
 
 <!-- ai:metadata -->
 <!--
-  Guide version: 1.0.0
-  Last updated: 2026-03-15
+  Guide version: 1.1.0
+  Last updated: 2026-03-31
   Target audience: Amplify JS DataStore Gen 1 users migrating to Gen 2
   Replacement library: Apollo Client 3.14.x + Amplify Gen 2 subscriptions
 -->
@@ -15,7 +15,7 @@ AWS Amplify DataStore provided a local-first data layer that automatically synch
 
 DataStore abstracted away the complexity of GraphQL operations, network state management, and data consistency. You worked with simple `save`, `query`, and `delete` methods on local models, and DataStore handled everything else behind the scenes.
 
-This guide shows you how to get equivalent capabilities using Apollo Client for queries, mutations, and caching, combined with Amplify Gen 2's built-in subscription support for real-time updates. Depending on how much of DataStore's feature set your app actually uses, you may find the migration simpler than expected.
+This guide shows you how to get equivalent capabilities using Apollo Client for queries, mutations, and caching, combined with Amplify Gen 2's built-in subscription support for real-time updates. In some cases the replacement is not a 1:1 match — for example, AppSync uses cursor-based pagination (`nextToken`), so apps using page-number navigation will need to adopt a "Load More" pattern or implement client-side pagination. The guide calls out these UX differences where they arise. Depending on how much of DataStore's feature set your app actually uses, you may find the migration simpler than expected.
 
 <!-- ai:what-this-guide-covers -->
 ## What This Guide Covers
@@ -33,11 +33,15 @@ Each strategy builds on the same Apollo Client foundation, so you can start with
 <!-- ai:who-should-use -->
 ## Who Should Use This Guide
 
-This guide is for developers who have an existing Amplify Gen 1 application that uses DataStore and are migrating to Amplify Gen 2. It assumes you are familiar with:
+This guide is for developers who have an existing Amplify Gen 1 application that uses DataStore and want to replace DataStore with Apollo Client. You do not need to migrate your backend to Gen 2 — this guide assumes you keep your Gen 1 backend and only change the frontend data layer.
+
+> **Gen 1 field name casing:** Gen 1 backends generate foreign key fields with uppercase ID suffixes (e.g., `postID`, `tagID`), while Gen 2 uses lowercase (`postId`, `tagId`). The code examples in this guide use the Gen 2 lowercase convention. If you are keeping your Gen 1 backend, you must adjust all field names in GraphQL operations to match your actual schema. Check your `schema.graphql` or use the AppSync console's schema tab to verify field names — mismatched casing returns `null` silently rather than erroring.
+
+It assumes you are familiar with:
 
 - React and React hooks
 - Basic GraphQL concepts (queries, mutations, subscriptions)
-- Amplify configuration and the `amplify_outputs.json` file
+- Your Amplify configuration file (`amplifyconfiguration.json` or `aws-exports.js`)
 - Your app's data model and how it uses DataStore today
 
 You do not need prior experience with Apollo Client. The guide covers Apollo Client setup from scratch.
@@ -63,9 +67,11 @@ Note that subscriptions use Amplify Gen 2's `client.graphql()` rather than Apoll
 
 1. **Choose your strategy.** Start with the [Decision Framework](./01-decision-framework.md) to determine which migration strategy fits your app. Most apps should start with API Only.
 
-2. **Set up Apollo Client.** Follow the [Apollo Client Setup](./04-apollo-setup.md) guide to configure Apollo Client with your AppSync endpoint and Cognito authentication. This foundation is shared across all three strategies.
+2. **Complete the prerequisites.** Follow the [Prerequisites](./03-prerequisites.md) to install dependencies, define your GraphQL operations, and set up TypeScript helpers. This section also covers TypeScript-specific considerations like `erasableSyntaxOnly` in Vite 8+ projects.
 
-3. **Follow your strategy guide.** Each strategy has dedicated sections with step-by-step instructions, code examples, and migration patterns.
+3. **Set up Apollo Client.** Follow the [Apollo Client Setup](./04-apollo-setup.md) to configure Apollo Client with your AppSync endpoint and Cognito authentication. Note: if your app uses the Amplify `Authenticator` component, `useQuery` hooks must be placed inside the Authenticator boundary — see [React Integration](./10-react-integration.md) for details.
+
+4. **Follow your strategy guide.** Each strategy has dedicated sections with step-by-step instructions, code examples, and migration patterns.
 
 ---
 

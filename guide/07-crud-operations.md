@@ -408,11 +408,6 @@ console.log(`Found ${posts.length} active posts`);
 ```typescript
 import { useQuery } from '@apollo/client';
 
-// Reusable helper to filter soft-deleted records (see Prerequisites page)
-function filterDeleted<T extends { _deleted?: boolean | null }>(items: T[]): T[] {
-  return items.filter((item) => !item._deleted);
-}
-
 function PostList() {
   const { data, loading, error } = useQuery(LIST_POSTS);
 
@@ -424,7 +419,7 @@ function PostList() {
 
   return (
     <ul>
-      {posts.map((post: any) => (
+      {posts.map(post => (
         <li key={post.id}>
           {post.title} (v{post._version})
         </li>
@@ -436,7 +431,7 @@ function PostList() {
 
 **Key differences:**
 
-- **Soft-deleted records are included in results.** Always use `filterDeleted()` or `.filter(item => !item._deleted)` on list query results. Forgetting this is the most common migration bug.
+- **Soft-deleted records are included in results.** Always use `filterDeleted()` on list query results. Forgetting this is the most common migration bug. See [Prerequisites: Filter Soft-Deleted Records](./03-prerequisites.md#helper-filter-soft-deleted-records).
 - **Pagination is cursor-based**, not page-based. DataStore used `{ page: 0, limit: 10 }` (zero-indexed page number). Apollo uses `{ limit: 10, nextToken: '...' }`. See [Predicates and Filters](./08-predicates-filters.md) for pagination patterns.
 - **No automatic re-fetch.** DataStore's local store updated automatically. With Apollo, use `refetchQueries` after mutations or `pollInterval` for periodic updates.
 
@@ -577,6 +572,64 @@ async function batchDelete(posts: any[], batchSize = 25) {
 ```
 
 > **Warning:** If any record's `_version` has changed between the query and the delete, that individual delete will fail with `ConditionalCheckFailedException`. Handle these failures in your error checking logic.
+
+---
+
+<!-- ai:crud-cascade-delete -->
+
+## Cascade Delete (Parent with Children)
+
+DataStore did not enforce referential integrity — you could delete a parent record without deleting its children. However, many DataStore apps manually deleted children first (comments, join table records) before deleting the parent. With Apollo Client, the same pattern applies: query children, delete each one, then delete the parent.
+
+```typescript
+// Delete a Post and all its related records (comments + tag associations)
+async function cascadeDeletePost(postId: string, postVersion: number) {
+  // Step 1: Delete child comments
+  const { data: commentData } = await apolloClient.query({
+    query: LIST_COMMENTS,
+    variables: { filter: { postID: { eq: postId } } },
+    fetchPolicy: 'network-only',
+  });
+  const comments = commentData.listComments.items.filter((c: any) => !c._deleted);
+  for (const c of comments) {
+    await apolloClient.mutate({
+      mutation: DELETE_COMMENT,
+      variables: { input: { id: c.id, _version: c._version } },
+    });
+  }
+
+  // Step 2: Delete join table records (e.g., PostTag)
+  const { data: ptData } = await apolloClient.query({
+    query: LIST_POST_TAGS,
+    variables: { filter: { postID: { eq: postId } } },
+    fetchPolicy: 'network-only',
+  });
+  const postTags = ptData.listPostTags.items.filter((pt: any) => !pt._deleted);
+  for (const pt of postTags) {
+    await apolloClient.mutate({
+      mutation: DELETE_POST_TAG,
+      variables: { input: { id: pt.id, _version: pt._version } },
+    });
+  }
+
+  // Step 3: Re-query the parent to get a fresh _version, then delete
+  const { data: freshPost } = await apolloClient.query({
+    query: GET_POST,
+    variables: { id: postId },
+    fetchPolicy: 'network-only',
+  });
+  await apolloClient.mutate({
+    mutation: DELETE_POST,
+    variables: { input: { id: postId, _version: freshPost.getPost._version } },
+  });
+}
+```
+
+**Key points:**
+
+- **Delete children before the parent.** If you delete the parent first, the children become orphaned and may still appear in filtered queries.
+- **Re-query the parent's `_version`** before the final delete. Deleting children may trigger subscription events that cause other clients to update the parent, changing its `_version`.
+- **Use `fetchPolicy: 'network-only'`** for all queries in the cascade to ensure you have the latest `_version` values.
 
 ---
 

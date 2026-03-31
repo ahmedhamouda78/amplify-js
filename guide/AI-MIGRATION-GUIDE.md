@@ -352,11 +352,13 @@ If you are still running a Gen 1 backend, complete the [Gen 1 to Gen 2 backend m
 
 ## Install Apollo Client
 
-Install Apollo Client and its required peer dependency:
+Install Apollo Client:
 
 ```bash
-npm install @apollo/client@^3.14.0 graphql
+npm install @apollo/client@^3.14.0
 ```
+
+You do **not** need to install `graphql` separately — it is already provided by `aws-amplify`. Apollo Client's peer dependency on `graphql` (`^15.0.0 || ^16.0.0`) is satisfied by the `graphql@15.8.0` that `aws-amplify` installs. Installing `graphql` explicitly would cause npm to resolve a newer version (v16), which conflicts with `aws-amplify`'s pinned `graphql@15.8.0` and fails with an `ERESOLVE` error.
 
 **Why Apollo Client v3 (not v4)?** The `apollo3-cache-persist` library — needed for the Local Caching strategy covered later in this guide — only supports Apollo Client v3. Starting with v3 avoids a disruptive version migration mid-project. Apollo Client 4.x introduces breaking API changes (class-based links, different import paths, React exports moved to a `/react` subpath) that are incompatible with v3 code. Using `@apollo/client@^3.14.0` ensures you get the latest v3 release (3.14.1) with all stability fixes.
 
@@ -506,6 +508,14 @@ export const DELETE_POST = gql`
 
 Note that every operation — including mutations — returns the full `PostDetails` fragment. This ensures you always have the latest `_version` value for subsequent mutations.
 
+> **Replacing DataStore enums:** DataStore model files export TypeScript `enum` types (e.g., `PostStatus`). After migration, you no longer import from `./models`, so you need to define these values yourself. If your TypeScript configuration has `erasableSyntaxOnly: true` (the default in TypeScript 5.9+ and Vite 8 scaffolds), `enum` declarations are not allowed because they emit runtime code. Use a `const` object with `as const` instead:
+>
+> ```typescript
+> // Instead of: enum PostStatus { DRAFT = 'DRAFT', PUBLISHED = 'PUBLISHED', ARCHIVED = 'ARCHIVED' }
+> const PostStatus = { DRAFT: 'DRAFT', PUBLISHED: 'PUBLISHED', ARCHIVED: 'ARCHIVED' } as const;
+> type PostStatus = (typeof PostStatus)[keyof typeof PostStatus];
+> ```
+
 <!-- ai:version-metadata -->
 
 ## Understanding _version Metadata
@@ -600,6 +610,8 @@ function filterDeleted<T extends { _deleted?: boolean | null }>(items: T[]): T[]
 const { data } = await apolloClient.query({ query: LIST_POSTS });
 const activePosts = filterDeleted(data.listPosts.items);
 ```
+
+> **TypeScript note:** This generic works best when your query results are typed. Without typed queries, Apollo returns `data` as `any`, and TypeScript infers `T` as the constraint `{ _deleted?: boolean | null }` — losing access to other fields. To get full type safety, define your queries using `TypedDocumentNode` (Apollo Client's recommended approach) or use inline filtering: `data.listPosts.items.filter((p: any) => !p._deleted)`.
 
 ### Can I Disable Conflict Resolution?
 
@@ -987,6 +999,8 @@ You now have two clients:
 - **`apolloClient`** — for queries, mutations, and caching (configured in [Apollo Client Setup](./04-apollo-setup.md))
 - **`amplifyClient`** — for subscriptions only
 
+> **Console warning:** If `generateClient()` is in a different file from `Amplify.configure()`, you may see the warning *"Amplify has not been configured"* in the console. This is because ES module imports execute before module body code, so `generateClient()` runs before `Amplify.configure()`. The warning is harmless — `generateClient()` creates a client proxy, and the actual configuration is resolved when you call `amplifyClient.graphql()` (which happens inside `useEffect`, well after Amplify is configured). This is the standard Amplify pattern for module-level client creation.
+
 ## Subscription GraphQL Definitions
 
 AppSync generates three subscription types for each model: `onCreatePost`, `onUpdatePost`, and `onDeletePost`. These use the same `PostDetails` fragment defined in [Prerequisites](./03-prerequisites.md#graphql-fragment-for-reusable-field-selection):
@@ -1256,7 +1270,7 @@ Complete these steps before writing any migration code. They ensure your environ
   - `DataStore.start()`, `DataStore.stop()`, `DataStore.clear()`
 - [ ] **Identify all models and relationships** -- List every DataStore model and its relationships (`hasMany`, `belongsTo`, `hasOne`, `manyToMany`). Note which models have custom primary keys or composite keys.
 - [ ] **Write GraphQL operations for each model** -- Generate or manually write the GraphQL queries, mutations, and subscriptions for each model. Use the fragment pattern from [Prerequisites](./03-prerequisites.md#graphql-fragment-for-reusable-field-selection). Include `_version`, `_deleted`, and `_lastChangedAt` in all fragments.
-- [ ] **Install Apollo Client** -- Run `npm install @apollo/client@^3.14.0 graphql`
+- [ ] **Install Apollo Client** -- Run `npm install @apollo/client@^3.14.0` (do not install `graphql` separately — it is already provided by `aws-amplify`)
 - [ ] **Set up Apollo Client** -- Follow [Apollo Client Setup](./04-apollo-setup.md) and verify the connection works by running a simple list query against your AppSync endpoint
 - [ ] **Set up Amplify subscription client** -- Create the `amplifyClient` using `generateClient()` as described in [Subscriptions](./05-subscriptions.md#setting-up-the-amplify-subscription-client)
 
@@ -3608,6 +3622,30 @@ function App() {
 ```
 
 Any component rendered inside `ApolloProvider` can use `useQuery`, `useMutation`, and other Apollo hooks without additional configuration.
+
+### Important: Apollo Hooks and the Authenticator Boundary
+
+> **Warning:** Apollo hooks like `useQuery` fire immediately when a component mounts. If you place `useQuery` in the same component that renders `<Authenticator>`, the query will execute **before the user signs in**, producing 401 errors and retry storms.
+
+The fix is to extract an inner component that is only rendered after successful authentication:
+
+```typescript
+// CORRECT — queries only fire after the user is authenticated
+function AppContent({ signOut, user }: { signOut?: () => void; user: any }) {
+  const { data } = useQuery(LIST_POSTS); // Fires after auth, has valid token
+  return <div>{/* uses data */}</div>;
+}
+
+function App() {
+  return (
+    <Authenticator>
+      {({ signOut, user }) => <AppContent signOut={signOut} user={user} />}
+    </Authenticator>
+  );
+}
+```
+
+This pattern ensures that all `useQuery` and `useMutation` hooks only mount after the user has authenticated, so the auth link in your Apollo Client has a valid Cognito token to inject.
 
 ---
 

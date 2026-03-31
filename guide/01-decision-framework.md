@@ -29,9 +29,9 @@ flowchart TD
     D -->|Yes| E[Local Caching Strategy]
     D -->|No| F[API Only Strategy]
 
-    C --> G[guide/10-offline-setup.md]
-    E --> H[guide/07-cache-setup.md]
-    F --> I[guide/07-api-only-crud.md]
+    C --> G[guide/13-offline-architecture.md]
+    E --> H[guide/11-cache-persistence.md]
+    F --> I[guide/07-crud-operations.md]
 ```
 
 ### Plain-Text Version
@@ -39,15 +39,15 @@ flowchart TD
 ```
 Does your app need to work offline?
   |
-  +-- Yes --> Offline-First Strategy (guide/10-offline-setup.md)
+  +-- Yes --> Offline-First Strategy (guide/13-offline-architecture.md)
   |
   +-- No
         |
         Does your app need instant UI updates before server confirmation?
           |
-          +-- Yes --> Local Caching Strategy (guide/07-cache-setup.md)
+          +-- Yes --> Local Caching Strategy (guide/11-cache-persistence.md)
           |
-          +-- No --> API Only Strategy (guide/07-api-only-crud.md)
+          +-- No --> API Only Strategy (guide/07-crud-operations.md)
 ```
 
 <!-- ai:strategy:api-only -->
